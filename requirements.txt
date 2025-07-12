@@ -1,0 +1,10 @@
+pyqt6
+pyside6
+pynput
+pillow
+psutil
+pyautogui
+keyboard
+ahk
+flask
+pywin32 
