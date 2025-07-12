@@ -1,6 +1,6 @@
 # PyScripts 🔮  
 [![GitHub downloads](https://img.shields.io/github/downloads/bogdasha666/PyScripts/total.svg)](https://github.com/bogdasha666/PyScripts)
-[![License](https://img.shields.io/github/license/negevvs/PyScripts)](LICENSE.txt)
+[![License](https://img.shields.io/github/license/bogdasha666/PyScripts)](LICENSE.txt)
 
 ### Enhance Your *Counter-Strike 2* Experience
 
