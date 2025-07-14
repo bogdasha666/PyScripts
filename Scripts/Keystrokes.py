@@ -127,7 +127,19 @@ class KeystrokesOverlay(QtWidgets.QWidget):
         self.drag_pos = None
 
 if __name__ == "__main__":
-    app = QtWidgets.QApplication(sys.argv)
+    app = QtWidgets.QApplication(sys.argv)  
     overlay = KeystrokesOverlay()
+    # Получаем размер экрана
+    screen = app.primaryScreen()
+    screen_geometry = screen.geometry()
+    screen_width = screen_geometry.width()
+    screen_height = screen_geometry.height()
+    # Получаем размер оверлея
+    overlay_width = overlay.width()
+    overlay_height = overlay.height()
+    # Центрируем по горизонтали, по вертикали - ниже центра (например, +1/3 высоты экрана)
+    x = (screen_width - overlay_width) // 2
+    y = (screen_height - overlay_height) // 2 + screen_height * 8 // 24.6 # буквально чуть-чуть пониже
+    overlay.move(x, y)
     overlay.show()
     sys.exit(app.exec())
