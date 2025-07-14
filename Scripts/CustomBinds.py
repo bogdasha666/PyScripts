@@ -156,6 +156,26 @@ def get_last_digit_of_player_id():
         # print(f"Ошибка чтения player_id из пайпа: {e}")
         return '0'
 
+def get_local_player_slot():
+    try:
+        handle = win32file.CreateFile(
+            PIPE_NAME,
+            win32file.GENERIC_READ | win32file.GENERIC_WRITE,
+            0, None,
+            win32file.OPEN_EXISTING,
+            0, None)
+        result, data = win32file.ReadFile(handle, 65536)
+        handle.Close()
+        gsi_data = json.loads(data.decode('utf-8') if isinstance(data, bytes) else data)
+        player = gsi_data.get('player', {})
+        slot = player.get('observer_slot')
+        if slot is None:
+            return '0'
+        return str(slot)
+    except Exception as e:
+        # print(f"Ошибка чтения observer_slot из пайпа: {e}")
+        return '0'
+
 def handle_selfkick_bind():
     try:
         if not is_cs2_active():
@@ -170,8 +190,13 @@ def handle_selfkick_bind():
         current_state = is_key_pressed(vk_code)
         previous_state = key_states.get("selfkick", False)
         if current_state and not previous_state:
-            last_digit = get_last_digit_of_player_id()
-            cfg_line = f"callvote kick {last_digit}"
+            # 1. status
+            write_custombind_cfg("status")
+            simulate_key_press(VK_F24)
+            time.sleep(0.25)
+            # 2. callvote kick <slot>
+            slot = get_local_player_slot()
+            cfg_line = f"callvote kick {slot}"
             write_custombind_cfg(cfg_line)
             simulate_key_press(VK_F24)
             time.sleep(0.1)
