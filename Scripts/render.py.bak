@@ -1,0 +1,425 @@
+from PyQt6.QtWidgets import (QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel,
+                             QPushButton, QApplication)
+from PyQt6.QtGui import QPainter, QFont, QColor, QPen
+from PyQt6.QtCore import Qt, QTimer
+import sys
+
+# Import custom classes
+from project import ScriptGUI  # For functionality
+from rgb_utils import update_global_rgb_hue  # For RGB effects
+
+class RGBSlider(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setFixedSize(32, 18)
+        self.checked = False
+        self.rgb_opacity = 0.0
+        self._hover_anim = 0.0
+        
+        # --- RGB Animation Timer ---
+        self._rgb_timer = QTimer(self)
+        self._rgb_timer.timeout.connect(self._animate)
+        self._rgb_timer.start(40)
+
+    def _animate(self):
+        target = 1.0 if self.checked or self.underMouse() else 0.0
+        speed = 0.13
+        if self._hover_anim < target:
+            self._hover_anim = min(self._hover_anim + speed, 1.0)
+        elif self._hover_anim > target:
+            self._hover_anim = max(self._hover_anim - speed, 0.0)
+        self.update()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.setChecked(not self.checked)
+
+    def enterEvent(self, event):
+        self.rgb_opacity = 1.0
+        self.update()
+
+    def leaveEvent(self, event):
+        if not self.checked:
+            self.rgb_opacity = 0.0
+        self.update()
+
+    def isChecked(self):
+        return self.checked
+
+    def setChecked(self, checked):
+        if self.checked != checked:
+            self.checked = checked
+            self.update()
+            from project import global_rgb_hue
+            self.stateChanged.emit(checked)
+
+    def blend_colors(self, color1, color2, t=0.5):
+        return QColor(
+            int(color1.red() * (1-t) + color2.red() * t),
+            int(color1.green() * (1-t) + color2.green() * t),
+            int(color1.blue() * (1-t) + color2.blue() * t)
+        )
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Colors
+        track_color = QColor("#353535")
+        knob_color = QColor("#e6e6e6")
+        border_color = QColor("#3a393f")
+        from project import global_rgb_hue
+        rgb_color = QColor.fromHsv(global_rgb_hue, 255, 255)
+
+        # Track (background)
+        painter.setPen(Qt.PenStyle.NoPen)
+        dark_rgb = QColor.fromHsv(global_rgb_hue, 180, 60)
+        t = 0.55 * self._hover_anim
+        bg_color = self.blend_colors(track_color, dark_rgb, t)
+        painter.setBrush(bg_color)
+        painter.drawRoundedRect(1, 1, self.width()-2, self.height()-2, 6, 6)
+
+        # Border
+        pen = QPen(border_color)
+        pen.setWidth(2)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(1, 1, self.width()-2, self.height()-2, 6, 6)
+
+        # Knob
+        knob_width = 12
+        knob_margin = 3
+        knob_x = self.width() - knob_width - knob_margin if self.checked else knob_margin
+        
+        # RGB glow when checked
+        if self.checked:
+            glow_color = QColor(rgb_color)
+            glow_color.setAlpha(40)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(glow_color)
+            painter.drawRoundedRect(knob_x-2, 1, knob_width+4, self.height()-2, 6, 6)
+
+        # Draw knob
+        painter.setPen(Qt.PenStyle.NoPen)
+        if self.checked:
+            painter.setBrush(rgb_color)
+        else:
+            painter.setBrush(knob_color)
+        painter.drawRoundedRect(knob_x, 3, knob_width, self.height()-6, 4, 4)
+
+    # Signal for state changes
+    from PyQt6.QtCore import pyqtSignal
+    stateChanged = pyqtSignal(bool)
+
+class AnimatedButton(QPushButton):
+    def __init__(self, text, parent=None):
+        super().__init__(text, parent)
+        self.setFixedSize(24, 24)
+        self._hover_anim = 0.0
+        self.setFont(QFont("Montserrat", 9, QFont.Weight.Bold))
+        self.setStyleSheet("""
+            QPushButton {
+                color: #e6e6e6;
+                border: none;
+                padding: 0;
+                background: transparent;
+            }
+        """)
+        
+        # Animation timer
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self.update_animation)
+        self._timer.start(40)
+
+    def update_animation(self):
+        target = 1.0 if self.underMouse() else 0.0
+        speed = 0.13
+        if self._hover_anim < target:
+            self._hover_anim = min(self._hover_anim + speed, 1.0)
+        elif self._hover_anim > target:
+            self._hover_anim = max(self._hover_anim - speed, 0.0)
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Draw background
+        if self._hover_anim > 0:
+            painter.setPen(Qt.PenStyle.NoPen)
+            bg_color = QColor(255, 255, 255, int(30 * self._hover_anim))
+            painter.setBrush(bg_color)
+            painter.drawRoundedRect(0, 0, self.width(), self.height(), 6, 6)
+
+        # Draw text
+        painter.setPen(QColor("#e6e6e6"))
+        painter.setFont(self.font())
+        painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.text())
+
+class AngleSlider(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setFixedSize(120, 26)
+        self.value = 180  # Default value
+        self.dragging = False
+        self.setMouseTracking(True)
+        self.rgb_opacity = 0.0
+        self._hover_anim = 0.0  # For smooth hover effect
+        
+        # Path to anglebind config file
+        self.cfg_path = r"C:\Program Files (x86)\Steam\steamapps\common\Counter-Strike Global Offensive\game\csgo\cfg\anglebind.cfg"
+
+        # Load saved value if exists
+        try:
+            with open("angle_value.txt", "r") as f:
+                self.value = int(f.read().strip())
+                self.update_cfg_file()
+        except:
+            self.value = 180
+
+        # RGB animation timer
+        self._rgb_timer = QTimer(self)
+        self._rgb_timer.timeout.connect(self._animate)
+        self._rgb_timer.start(40)
+
+    def angle_to_yaw(self, angle):
+        """Convert angle to CS2 yaw value"""
+        RATIO = 19.7628472222  # 3557.3125/180
+        return angle * RATIO
+
+    def update_cfg_file(self):
+        """Update CS2 config with current yaw value"""
+        try:
+            yaw = self.angle_to_yaw(self.value)
+            content = f"yaw {yaw:.4f} 1 0\n"
+            with open(self.cfg_path, "w") as f:
+                f.write(content)
+        except Exception as e:
+            print(f"[Error writing anglebind.cfg]: {e}")
+
+    def _animate(self):
+        target = 1.0 if self.dragging or self.underMouse() else 0.0
+        speed = 0.13
+        if self._hover_anim < target:
+            self._hover_anim = min(self._hover_anim + speed, 1.0)
+        elif self._hover_anim > target:
+            self._hover_anim = max(self._hover_anim - speed, 0.0)
+        self.update()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.dragging = True
+            self.update_value(event.pos().x())
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.dragging = False
+
+    def mouseMoveEvent(self, event):
+        if self.dragging:
+            self.update_value(event.pos().x())
+
+    def enterEvent(self, event):
+        self.rgb_opacity = 1.0
+        self.update()
+
+    def leaveEvent(self, event):
+        if not self.dragging:
+            self.rgb_opacity = 0.0
+            self.update()
+
+    def update_value(self, x):
+        x = max(0, min(x, self.width()))
+        self.value = int((x / self.width()) * 360 - 180)
+        self.value = max(-180, min(180, self.value))
+        # Save value to file
+        try:
+            with open("angle_value.txt", "w") as f:
+                f.write(str(self.value))
+        except:
+            pass
+        # Update CS2 config
+        self.update_cfg_file()
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Colors and base settings
+        base_bg = QColor("#353535")
+        from project import global_rgb_hue
+        dark_rgb = QColor.fromHsv(global_rgb_hue, 180, 60)
+        t = 0.55 * self._hover_anim
+        bg_color = QColor(
+            int(base_bg.red() * (1 - t) + dark_rgb.red() * t),
+            int(base_bg.green() * (1 - t) + dark_rgb.green() * t),
+            int(base_bg.blue() * (1 - t) + dark_rgb.blue() * t)
+        )
+
+        # Background
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(bg_color)
+        painter.drawRoundedRect(1, 1, self.width() - 2, self.height() - 2, 6, 6)
+
+        # Border
+        pen = QPen(QColor("#3a393f"))
+        pen.setWidth(2)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(1, 1, self.width() - 2, self.height() - 2, 6, 6)
+
+        # Value indicator
+        margin = 4
+        slider_width = self.width() - 2 * margin
+        x = int((self.value + 180) * slider_width / 360) + margin
+        indicator_color = QColor.fromHsv(global_rgb_hue, 255, 255)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(indicator_color)
+        painter.drawRoundedRect(x - 2, 2, 4, self.height() - 4, 3, 3)
+
+        # Value text
+        painter.setPen(QColor("#FFFFFF"))
+        font = QFont("Montserrat", 9, QFont.Weight.Bold)
+        painter.setFont(font)
+        text = str(self.value) + "°"
+        text_rect = self.rect()
+        painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, text)
+
+class FunctionRow(QWidget):
+    def __init__(self, text, slot, show_gear=False, gear_callback=None):
+        super().__init__()
+        self.setFixedHeight(30)
+        
+        # Main layout
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        
+        # Function name
+        label = QLabel(text)
+        label.setFont(QFont("Montserrat", 9))
+        label.setStyleSheet("color: #e6e6e6;")
+        layout.addWidget(label)
+        
+        # Spacer
+        layout.addStretch()
+        
+        # RGB Slider
+        self.slider = RGBSlider()
+        self.slider.stateChanged.connect(slot)
+        layout.addWidget(self.slider)
+        
+        # Gear button (optional)
+        if show_gear:
+            from PyQt6.QtGui import QIcon
+            gear_btn = QPushButton()
+            gear_btn.setIcon(QIcon("gear.svg"))
+            gear_btn.setFixedSize(18, 18)
+            gear_btn.setStyleSheet("""
+                QPushButton {
+                    background: transparent;
+                    border: none;
+                }
+                QPushButton:hover {
+                    background-color: rgba(255, 255, 255, 0.1);
+                    border-radius: 4px;
+                }
+            """)
+            if gear_callback:
+                gear_btn.clicked.connect(gear_callback)
+            layout.addWidget(gear_btn)
+
+class BindPopup(QWidget):
+    def __init__(self, parent=None, title="Bind", bind_file=None):
+        super().__init__(parent)
+        self.bind_file = bind_file
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setFixedSize(220, 90 if "Angle Bind" in title else 50)
+        
+        # Container for content
+        container = QWidget(self)
+        container.setStyleSheet("""
+            background-color: rgba(26, 26, 26, 220);
+            border: 2px solid #3a393f;
+            border-radius: 10px;
+        """)
+        container.setFixedSize(self.size())
+        
+        # Main layout
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
+
+        # Header layout
+        hlayout = QHBoxLayout()
+        hlayout.setSpacing(8)
+        
+        # Title
+        title_label = QLabel(title)
+        title_label.setFont(QFont("Montserrat", 9, QFont.Weight.Bold))
+        title_label.setStyleSheet("color: #e6e6e6; background: transparent;")
+        hlayout.addWidget(title_label)
+
+        # Bind button
+        self.bind_button = QPushButton()
+        self.bind_button.setFixedSize(100, 26)
+        self.bind_button.setFont(QFont("Montserrat", 9, QFont.Weight.Bold))
+        self.bind_button.setStyleSheet("""
+            QPushButton {
+                background-color: #353535;
+                color: #e6e6e6;
+                border-radius: 6px;
+                padding: 0 12px;
+                text-align: center;
+            }
+            QPushButton:hover {
+                background-color: #404040;
+                border: 1px solid #4a4a4f;
+            }
+            QPushButton:pressed {
+                background-color: #303030;
+            }
+        """)
+        self.bind_button.clicked.connect(self.start_listen_key)
+        hlayout.addWidget(self.bind_button)
+        hlayout.addStretch()
+        
+        layout.addLayout(hlayout)
+        
+        # Add angle slider section for Angle Bind popup
+        if "Angle Bind" in title:
+            # Separator
+            separator = QFrame()
+            separator.setFrameShape(QFrame.Shape.HLine)
+            separator.setStyleSheet("background-color: #3a393f; margin: 4px 0px; border: none;")
+            separator.setFixedHeight(1)
+            layout.addWidget(separator)
+            
+            # Degree layout
+            degree_layout = QHBoxLayout()
+            degree_layout.setSpacing(8)
+            degree_layout.setContentsMargins(0, 0, 0, 0)
+            
+            # Degree label
+            degree_label = QLabel("Degree")
+            degree_label.setFont(QFont("Montserrat", 9, QFont.Weight.Bold))
+            degree_label.setStyleSheet("color: #e6e6e6; background: transparent;")
+            degree_layout.addWidget(degree_label)
+            degree_layout.setAlignment(degree_label, Qt.AlignmentFlag.AlignVCenter)
+            
+            # Angle slider
+            self.angle_slider = AngleSlider()
+            degree_layout.addWidget(self.angle_slider, 1)
+            degree_layout.setAlignment(self.angle_slider, Qt.AlignmentFlag.AlignVCenter)
+            
+            layout.addLayout(degree_layout)
+        
+        # Main widget layout
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(container)
+
+        self.listening = False
+        self.update_bind_button()
